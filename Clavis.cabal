@@ -1,0 +1,66 @@
+cabal-version:      3.16
+name:               Clavis
+version:            0.1.0.0
+synopsis: Terminal VIA V3 layout manager for QMK Keyboards
+description:
+  This package compiles to an executable that can be used to exctract and flash layouts to VIA compatible keyboards
+  Clavis is meant to be an terminal friendly way to manage your key assignments.
+  It creates a JSON file that resembles the physical layout on your keyboard. This JSON can be edited in a text editor and then flashed back to the keyboard
+  Clavis uses a minimal subset of the VIA Api.
+license:            BSD-3-Clause
+author:             Dennis Gorbaczewski
+maintainer:         dennis@gorbaczewski.de
+copyright:          Copyright (c) 2026 Dennis Gorbaczewski, All rights reserved.
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md,
+                    README.md
+common warnings
+    ghc-options: -Wall
+
+executable clavis
+    import:           warnings
+    main-is:          Main.hs
+    other-modules:    Paths_Clavis
+    autogen-modules:  Paths_Clavis
+    build-depends:    base >=4.17 && < 5,
+                      Clavis,
+                      aeson,
+                      bytestring,
+                      hidapi,
+                      containers,
+                      optparse-applicative
+    hs-source-dirs:   app
+    default-language: Haskell2010
+
+library
+    import:           warnings
+    exposed-modules:  Keycodes, 
+                      Formatter, 
+                      Protocol,
+                      Layout,
+                      Types
+    hs-source-dirs:   src
+    build-depends:    base >=4.17 && < 5,
+                      hidapi,
+                      aeson,
+                      bytestring,
+                      containers,
+                      text,
+                      optparse-applicative
+    default-language: Haskell2010
+
+test-suite Clavis-test
+    import:           warnings
+    default-language: Haskell2010
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Spec.hs
+    other-modules:    LayoutSpec,
+                      KeycodesSpec,
+                      ProtocolSpec
+    build-depends:    base >=4.17 && < 5,
+                      Clavis,
+                      hspec,
+                      aeson,
+                      bytestring
+    build-tool-depends: hspec-discover:hspec-discover
