@@ -1,0 +1,29 @@
+# Stack
+.stack-work/
+.stack-work-temp/
+stack.yaml.lock
+cabal.project.local
+
+# Cabal
+dist/
+dist-newstyle/
+cabal.sandbox.config
+.sandbox/
+cabal.project.local~
+
+# GHC
+*.hi
+*.o
+*.dyn_hi
+*.dyn_o
+*.prof
+*.aux
+*.hp
+*.eventlog
+*.eventlog.stats
+
+# Nix
+flake.lock
+
+# macOS
+.DS_Store
