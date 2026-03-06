@@ -26,11 +26,11 @@ instance FromJSON CustomKeycode
 -- | This data structure mirrors the VIA/QMK JSON reference file your manufacturer provides
 -- clavis relies on this data to produce a close physical layout and to map custom keycode aliases
 data ViaConfig = ViaConfig
-  { name      :: String -- ^ Keyboard model name
-  , vendorId  :: String -- ^ Hardware vendor id
-  , productId :: String -- ^ Hardware product id
-  , customKeycodes :: Maybe [CustomKeycode] -- ^ List of manufacturer defined custom keycodes
-  , layouts :: Value -- ^ VIA V3 uses an raw array
+  { name      :: String                       -- ^ Keyboard model name
+  , vendorId  :: String                       -- ^ Hardware vendor id
+  , productId :: String                       -- ^ Hardware product id
+  , customKeycodes :: Maybe [CustomKeycode]   -- ^ List of manufacturer defined custom keycodes
+  , layouts :: Value                          -- ^ VIA V3 uses an raw array
   } deriving (Show, Generic)
 
 instance FromJSON ViaConfig
@@ -56,8 +56,9 @@ data ViaCommand
 
 -- | Represents the actions Clavis can execute
 data Action 
-  = Yank -- ^ Reads the layout from the keyboard
-  | Put -- ^ Writes the layout to the keyboard
+  = Yank FilePath FilePath  -- ^ Reads the layout from the keyboard
+  | Put FilePath FilePath   -- ^ Writes the layout to the keyboard
+  | List
 
 data Options = Options
   { optAction :: Action

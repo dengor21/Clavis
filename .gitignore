@@ -11,6 +11,9 @@ cabal.sandbox.config
 .sandbox/
 cabal.project.local~
 
+# Tempfiles
+temp/
+
 # GHC
 *.hi
 *.o

@@ -3,7 +3,7 @@
 
 module Protocol where
 
-import Types
+import Types (ViaCommand(..), Keycode(..), Layer(..), Row(..), Col(..), VendorId(..), ProductId(..) )
 import qualified Data.ByteString as BS
 import qualified Data.Map as M
 import Data.Word (Word8, Word16)
@@ -131,3 +131,12 @@ queryLayerCount keyboard = do
 parseLayerCountResponse :: [Word8] -> Word8
 parseLayerCountResponse (0x11 : n : _) = n
 parseLayerCountResponse _ = 4
+
+isViaDevice :: HID.DeviceInfo -> Bool
+isViaDevice d = HID.usagePage d == viaUsagePage 
+
+enumerateViaDevices :: IO [HID.DeviceInfo]
+enumerateViaDevices = do
+  devices <- HID.enumerate Nothing Nothing
+  let viaDevices = filter isViaDevice devices
+  return viaDevices 
