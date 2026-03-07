@@ -3,7 +3,7 @@
 
 module Protocol where
 
-import Types (ViaCommand(..), Keycode(..), Layer(..), Row(..), Col(..), VendorId(..), ProductId(..), LayerData(..) )
+import Types (ViaCommand(..), Keycode(..), Layer(..), Row(..), Col(..), VendorId(..), ProductId(..))
 import qualified Data.ByteString as BS
 import qualified Data.Map as M
 import Data.Word (Word8, Word16)
@@ -128,8 +128,8 @@ serializeViaCmd cmd = BS.pack $ padTo32 (toBytes cmd)
 
 
 readKeycode :: HID.Device -> M.Map Word16 String -> Layer -> Row -> Col -> IO String
-readKeycode keyboard reverseDict layer row col = do
-  let cmd = serializeViaCmd (GetKeycode layer row col)
+readKeycode keyboard reverseDict lay row col = do
+  let cmd = serializeViaCmd (GetKeycode lay row col)
   result <- HID.write keyboard cmd
 
   case result of

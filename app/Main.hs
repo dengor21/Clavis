@@ -18,7 +18,7 @@ import Types
 import Protocol
 import Layout
 import Options.Applicative
-import Control.Monad (forM_)
+import Control.Monad (when, forM_)
 
 parseAction :: Parser Action
 parseAction = subparser
@@ -63,11 +63,11 @@ withViaKeyboard refPath callback = do
       case (,) <$> parseHex (vendorId config) <*> parseHex (productId config) of
         Left err -> putStrLn $ "Failed to parse hardware ID: " ++ err
         Right (rawVid, rawPid) -> do
-          let vid = VendorId rawVid
-              pid = ProductId rawPid
+          let hexvid = VendorId rawVid
+              hexpid = ProductId rawPid
 
           HID.withHIDAPI $ do
-            connection <- connectViaKeyboard vid pid
+            connection <- connectViaKeyboard hexvid hexpid
             case connection of
               Nothing -> do
                 putStrLn "Could not find VIA endpoint."
@@ -108,7 +108,7 @@ executeYank keyboard config reverseDict maybeLayer layoutPath = do
           let physicalLayers = toPhysicalLayout rawLayers mapping
               layerDataList = zipWith (\n keyData -> LayerData n keyData)
                                 [0..] physicalLayers
-          writeLayoutFile layoutPath layerDataList
+          writeLayoutFile layoutPath (createUserConfig layerDataList config)
           putStrLn $ "\nSuccess! Layout yanked to '" ++ layoutPath ++ "'"
 
         Just n -> do
@@ -118,7 +118,12 @@ executeYank keyboard config reverseDict maybeLayer layoutPath = do
             Just rawLayer -> do
               let physicalLayer = toPhysicalLayoutSingle rawLayer mapping
                   layerDataList = [LayerData n physicalLayer]
-              writeLayoutFile  layoutPath  layerDataList
+              writeLayoutFile  layoutPath  (createUserConfig layerDataList config)
+    where
+      createUserConfig layerList (ViaConfig kbName venId prodId _ _) = 
+        UserConfig 1 kbName venId prodId [] layerList 
+
+            
   
 
 -- | Writes a previously generated layout JSON back to the keyboard
@@ -132,24 +137,37 @@ executePut keyboard config forwardDict maybeLayer layoutPath = do
   case result of
     Left err -> putStrLn $ "Error parsing layout JSON: " ++ err
     Right userConfig -> 
-      case maybeLayer of
-        Nothing -> do
-          case getLayoutMapping config of
-            Left err -> putStrLn $ "Failed to read layout mapping: " ++ err
-            Right mapping -> do
-              putStrLn "Flashing layout to keyboard..."
-              forM_ (layers userConfig) $ \ld ->
-                let electrical = toElectricalLayer (keys ld) mapping
-                in putLayoutN keyboard electrical (layer ld) forwardDict
-              putStrLn "\nSuccess! Your layout has been flashed to the keyboard"
+      case validateConfig userConfig (vendorId config) (productId config) of
+        Left err -> putStrLn err
+        Right () ->
+          case maybeLayer of
+            Nothing -> do
+              case getLayoutMapping config of
+                Left err -> putStrLn $ "Failed to read layout mapping: " ++ err
+                Right mapping -> do
+                  putStrLn "Flashing layout to keyboard..."
+                  forM_ (layers userConfig) $ \ld ->
+                    let electrical = toElectricalLayer (keys ld) mapping
+                    in putLayoutN keyboard electrical (layer ld) forwardDict
+                  putStrLn "\nSuccess! Your layout has been flashed to the keyboard"
 
-        Just n -> do
-          case getLayoutMapping config of
-            Left err -> putStrLn $ "Failed to read layout mapping: " ++ err
-            Right mapping -> do
-              putStrLn "Flashing layout to keyboard..."
-              let electrical = toElectricalLayer (keys $ (layers userConfig ) !! fromIntegral n) mapping
-              putLayoutN keyboard electrical n forwardDict
+            Just n -> do
+              case getLayoutMapping config of
+                Left err -> putStrLn $ "Failed to read layout mapping: " ++ err
+                Right mapping -> do
+                  putStrLn "Flashing layout to keyboard..."
+                  let electrical = toElectricalLayer (keys $ (layers userConfig ) !! fromIntegral n) mapping
+                  putLayoutN keyboard electrical n forwardDict
+
+
+validateConfig :: UserConfig -> String -> String -> Either String ()
+validateConfig config rawVid rawPid = do
+  when (formatVersion config > 1) $
+    Left "Hello to the future, it seems I had to revise the format. \nPlease get the latest version or yank a new layout file"
+  when (vid config /= rawVid) $
+    Left "VendorIDs don't match." 
+  when (pid config /= rawPid) $
+    Left "ProductIDs don't match."
 
 
 executeList :: IO ()
@@ -180,9 +198,9 @@ buildDict :: [(String, Word16)] -> M.Map String Word16
 buildDict list = M.union (M.fromList list) baseAliases
 
 
-writeLayoutFile :: FilePath -> [LayerData] -> IO ()
-writeLayoutFile layoutPath physicalLayers = do
-  BSL8.writeFile layoutPath (formatLayoutMatrix physicalLayers)
+writeLayoutFile :: FilePath -> UserConfig -> IO ()
+writeLayoutFile layoutPath uc = do
+  BSL8.writeFile layoutPath (formatLayoutMatrix uc)
 
 
 formatDeviceInfo :: HID.DeviceInfo -> String

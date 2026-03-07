@@ -26,11 +26,11 @@ instance FromJSON CustomKeycode
 -- | This data structure mirrors the VIA/QMK JSON reference file your manufacturer provides
 -- clavis relies on this data to produce a close physical layout and to map custom keycode aliases
 data ViaConfig = ViaConfig
-  { name      :: String                       -- ^ Keyboard model name
-  , vendorId  :: String                       -- ^ Hardware vendor id
-  , productId :: String                       -- ^ Hardware product id
-  , customKeycodes :: Maybe [CustomKeycode]   -- ^ List of manufacturer defined custom keycodes
-  , layouts :: Value                          -- ^ VIA V3 uses an raw array
+  { name            :: String                       -- ^ Keyboard model name
+  , vendorId        :: String                       -- ^ Hardware vendor id
+  , productId       :: String                       -- ^ Hardware product id
+  , customKeycodes  :: Maybe [CustomKeycode]   -- ^ List of manufacturer defined custom keycodes
+  , layouts         :: Value                          -- ^ VIA V3 uses an raw array
   } deriving (Show, Generic)
 
 instance FromJSON ViaConfig
@@ -39,15 +39,20 @@ instance FromJSON ViaConfig
 -- clavis tranposes the raw electrical layout to one resembling the physical layout of your keyboard.
 -- The accuracy of this depends on the quality of the reference JSON your manufacturer provides.
 data UserConfig = UserConfig 
-  { layers :: [LayerData] -- ^ The layers containing the layout 
+  { formatVersion       :: Int
+  , keyboardName        :: String
+  , vid                 :: String
+  , pid                 :: String
+  , macros              :: [Value]
+  , layers              :: [LayerData] -- ^ The layers containing the layout 
   } deriving (Show, Generic)
 
 instance FromJSON UserConfig
 instance ToJSON UserConfig
 
 data LayerData = LayerData
-  { layer :: Word8
-  , keys :: [[String]]
+  { layer   :: Word8
+  , keys    :: [[String]]
   } deriving (Show, Generic)
 
 instance FromJSON LayerData
@@ -69,7 +74,7 @@ data Action
   | List
 
 data Options = Options
-  { optAction :: Action
-  , optRefPath :: FilePath
+  { optAction     :: Action
+  , optRefPath    :: FilePath
   , optLayoutPath :: FilePath
   }

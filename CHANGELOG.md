@@ -11,3 +11,10 @@
 ## 0.2.0.0 -- 2026-03-07
 
 * Added layer selection to yank and put. Also added a layer field to the layout json. Breaks the old layout format
+
+## 0.2.1.0 -- 2026-03-07
+
+* Redesigned the user config json.
+* Added formatVersion, vid and pid fields, to check before writing to the keyboard.
+* Added keyboardName for information
+* Added a placeholder macros field.

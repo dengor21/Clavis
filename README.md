@@ -3,30 +3,48 @@
 Clavis is a VIA compatible layout manager for QMK keyboards written in Haskell.
 
 ## Features
+- Listing connected VIA compatible keyboards.
 - Saving your current keyboard layout.
 - Flashing a modified keyboard layout.
 
 ## How it works
-Clavis uses a minimal subset of the VIA Api to reconfigure your keyboard.
+Clavis uses a subset of the VIA Api to reconfigure your keyboard.
 
-To allow you to reconfigure your keylayout, Clavis generates a JSON file which should represent your physical keyboard layout.
-The layout information is provided by the VIA reference JSON for your keyboard.
+To allow you to reconfigure your keylayout, Clavis generates a JSON file containing information about your keyboard.
+VendorId and ProductId are checked before writing to the keyboard.
+The Macro field is a placeholder for now.
+
+Clavis uses the layout information in the VIA reference json to order the keymappings in the json list.
+This should roughly resemble your physical keyboard layout.
+There is one layer object per layer your keyboard has.
 
 ```json
 {
-  "layers":
-  [
-    [
-      ["esc", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "bspace"],
-      ["tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\"],
-      ["caps", "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "enter"],
-      ["lsft", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "rsft"]
-    ]
+    {
+      "formatVersion": 1, 
+      "keyboardName": "Keychron Q11 ANSI Knob", 
+      "vid": "0x3438", 
+      "pid": "0x01E0", 
+      "macros": [],
+      "layers": [
+        {
+          "layer": 0,
+          "keys": [
+            ["mute", "esc", "briu", "brid", "MCtrl", "LPad", "rgb_vad", "rgb_vai", "mprv", "play", "mnxt", "mute", "vold", "volu", "ins", "del", "mute"],
+            ["macro(3)", "`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "bspace", "pgup"],
+            ["macro(4)", "tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\", "pgdn"],
+            ["macro(5)", "esc", "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "enter", "home"],
+            ["macro(6)", "lsft", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "rsft", "up"],
+            ["NumLock", "lctl", "LOpt", "LCmd", "fn1", "spc", "spc", "RCmd", "fn1", "rctl", "left", "down", "right"]
+          ]
+        },
+        [......]
+      ]
+    }
   ]
 }
 ```
 
-If your keyboard has multiple layers, then Clavis will generate an array for each.
 You can use short names for the most common keys, if your key is not in the dictionary, you can enter the hex code directly like `"0x53"` or `"53"`.
 
 To generate a file with your current layout use `clavis yank`
@@ -35,6 +53,10 @@ To generate a file with your current layout use `clavis yank`
 
 ```
 clavis yank reference.json outputLayout.json
+
+or to yank a specific layer
+
+clavis yank reference.json outputLayout.json --layer 0
 ```
 
 You can then edit the file in any text editor.
@@ -45,6 +67,10 @@ To reconfigure your keyboard use `clavis put`
 
 ```
 clavis put reference.json changedLayout.json
+
+or to write a specific layer
+
+clavis put reference.json changedLayout.json --layer 0
 ```
 
 ## VIA Reference JSON
