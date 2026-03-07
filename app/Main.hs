@@ -12,12 +12,13 @@ import Paths_Clavis (version)
 import qualified Data.Map as M
 import Keycodes (baseAliases)
 import Formatter (formatLayoutMatrix)
-import Data.Word (Word16)
+import Data.Word (Word8, Word16)
 import Data.Maybe
 import Types
 import Protocol
 import Layout
 import Options.Applicative
+import Control.Monad (forM_)
 
 parseAction :: Parser Action
 parseAction = subparser
@@ -29,10 +30,12 @@ parseAction = subparser
     parseYank = Yank
       <$> argument str (metavar "REF_JSON" <> help "Path to manufacturer VIA JSON")
       <*> argument str (metavar "LAYOUT_JSON" <> help "Path to output layout file")
+      <*> optional (option auto (long "layer" <> short 'l' <> metavar "N" <> help "Layer number"))
 
     parsePut = Put
       <$> argument str (metavar "REF_JSON" <> help "Path to manufacturer VIA JSON")
       <*> argument str (metavar "LAYOUT_JSON" <> help "Path to layout file to flash")
+      <*> optional (option auto (long "layer" <> short 'l' <> metavar "N" <> help "Layer number"))
 
 
 clavisVersion :: String
@@ -83,48 +86,71 @@ withViaKeyboard refPath callback = do
 exClav :: Action -> IO ()
 exClav List = do
   executeList
-exClav (Yank ref out) = withViaKeyboard ref $ \keyboard config ->
-  executeYank keyboard config (buildReverseKeycodeDict config) out
-exClav (Put ref input) = withViaKeyboard ref $ \keyboard config ->
-  executePut keyboard config (buildForwardKeycodeDict config) input
+exClav (Yank ref out la) = withViaKeyboard ref $ \keyboard config ->
+  executeYank keyboard config (buildReverseKeycodeDict config) la out
+exClav (Put ref input la) = withViaKeyboard ref $ \keyboard config ->
+  executePut keyboard config (buildForwardKeycodeDict config) la input
 
 
 -- | Reads the keyboard layout via hidapi and transforms it into a JSON
 -- The JSON is transposed into layout resembling the physical keyboard
 -- The information for this transformation is read from the VIA reference JSON
-executeYank :: HID.Device -> ViaConfig -> M.Map Word16 String -> FilePath -> IO ()
-executeYank keyboard config reverseDict layoutPath = do
+executeYank :: HID.Device -> ViaConfig -> M.Map Word16 String -> Maybe Word8 -> FilePath -> IO ()
+executeYank keyboard config reverseDict maybeLayer layoutPath = do
   putStrLn "\nYanking layout from keyboard"
 
   case getLayoutMapping config of
     Left err -> putStrLn $ "Failed to read layout mapping: " ++ err
-    Right mapping -> do
-      rawLayers <- yankRawLayout keyboard mapping reverseDict
-      let physicalLayers = toPhysicalLayout rawLayers mapping
+    Right mapping -> 
+      case maybeLayer of
+        Nothing -> do
+          rawLayers <- yankRawLayout keyboard mapping reverseDict
+          let physicalLayers = toPhysicalLayout rawLayers mapping
+              layerDataList = zipWith (\n keyData -> LayerData n keyData)
+                                [0..] physicalLayers
+          writeLayoutFile layoutPath layerDataList
+          putStrLn $ "\nSuccess! Layout yanked to '" ++ layoutPath ++ "'"
 
-      writeLayoutFile layoutPath physicalLayers
-      putStrLn $ "\nSuccess! Layout yanked to '" ++ layoutPath ++ "'"
+        Just n -> do
+          result <- yankRawLayoutN keyboard mapping reverseDict n
+          case result of
+            Nothing -> putStrLn $ "Layer " ++ show n ++ " does not exist"
+            Just rawLayer -> do
+              let physicalLayer = toPhysicalLayoutSingle rawLayer mapping
+                  layerDataList = [LayerData n physicalLayer]
+              writeLayoutFile  layoutPath  layerDataList
   
 
 -- | Writes a previously generated layout JSON back to the keyboard
 -- The JSON is transposed from the physical Layout back to the electrical grid.
 -- Then executePut sends a set command to the keyboard for each of the keys.
-executePut :: HID.Device -> ViaConfig -> M.Map String Word16 -> FilePath -> IO ()
-executePut keyboard config forwardDict layoutPath = do
+executePut :: HID.Device -> ViaConfig -> M.Map String Word16 -> Maybe Word8 -> FilePath -> IO ()
+executePut keyboard config forwardDict maybeLayer layoutPath = do
   putStrLn $ "\nReading layout from: " ++ layoutPath
   result <- loadJsonFile layoutPath
 
   case result of
     Left err -> putStrLn $ "Error parsing layout JSON: " ++ err
-    Right userConfig -> do
-        case getLayoutMapping config of
-          Left err -> putStrLn $ "Failed to read layout mapping: " ++ err
-          Right mapping -> do
-            let electricalLayers = toElectricalLayout (layers userConfig) mapping
+    Right userConfig -> 
+      case maybeLayer of
+        Nothing -> do
+          case getLayoutMapping config of
+            Left err -> putStrLn $ "Failed to read layout mapping: " ++ err
+            Right mapping -> do
+              putStrLn "Flashing layout to keyboard..."
+              forM_ (layers userConfig) $ \ld ->
+                let electrical = toElectricalLayer (keys ld) mapping
+                in putLayoutN keyboard electrical (layer ld) forwardDict
+              putStrLn "\nSuccess! Your layout has been flashed to the keyboard"
 
-            putStrLn "Flashing layout to keyboard..."
-            putLayout keyboard electricalLayers forwardDict
-            putStrLn "\nSuccess! Your layout has been flashed to the keyboard"
+        Just n -> do
+          case getLayoutMapping config of
+            Left err -> putStrLn $ "Failed to read layout mapping: " ++ err
+            Right mapping -> do
+              putStrLn "Flashing layout to keyboard..."
+              let electrical = toElectricalLayer (keys $ (layers userConfig ) !! fromIntegral n) mapping
+              putLayoutN keyboard electrical n forwardDict
+
 
 executeList :: IO ()
 executeList = do
@@ -154,7 +180,7 @@ buildDict :: [(String, Word16)] -> M.Map String Word16
 buildDict list = M.union (M.fromList list) baseAliases
 
 
-writeLayoutFile :: FilePath -> [[[String]]] -> IO ()
+writeLayoutFile :: FilePath -> [LayerData] -> IO ()
 writeLayoutFile layoutPath physicalLayers = do
   BSL8.writeFile layoutPath (formatLayoutMatrix physicalLayers)
 

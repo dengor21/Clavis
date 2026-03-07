@@ -65,15 +65,20 @@ toPhysicalLayout rawLayers mapping =
   | rawLayer <- rawLayers
   ]
 
-toElectricalLayout :: [[[String]]] -> [[(Int, Int)]] -> [[[String]]]
-toElectricalLayout physicalLayers mapping =
+
+toPhysicalLayoutSingle :: [[String]] -> [[(Int, Int)]] -> [[String]]
+toPhysicalLayoutSingle rawLayer mapping =
+  [ [ rawLayer !! r !! c | (r, c) <- rowMapping ]
+  | rowMapping <- mapping
+  ]
+
+toElectricalLayer :: [[String]] -> [[(Int, Int)]] -> [[String]]
+toElectricalLayer physicalLayer mapping =
   let flatMapping = concat mapping
       maxR = maximum (map fst flatMapping)
       maxC = maximum (map snd flatMapping)
       blankMatrix = replicate (maxR + 1) (replicate (maxC + 1) "none")
-  in [ foldl updateMatrix blankMatrix (zip flatMapping (concat physicalLayer))
-     | physicalLayer <- physicalLayers
-     ]
+  in foldl updateMatrix blankMatrix (zip flatMapping (concat physicalLayer))
 
 generateCoordinateList :: Word8 -> [(Int, Int)] -> [(Layer, Row, Col)]
 generateCoordinateList numLayers flatMapping =

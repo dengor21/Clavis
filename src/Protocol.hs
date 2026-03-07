@@ -3,7 +3,7 @@
 
 module Protocol where
 
-import Types (ViaCommand(..), Keycode(..), Layer(..), Row(..), Col(..), VendorId(..), ProductId(..) )
+import Types (ViaCommand(..), Keycode(..), Layer(..), Row(..), Col(..), VendorId(..), ProductId(..), LayerData(..) )
 import qualified Data.ByteString as BS
 import qualified Data.Map as M
 import Data.Word (Word8, Word16)
@@ -45,6 +45,26 @@ yankRawLayout keyboard mapping reverseDict = do
   return layerData
 
 
+yankRawLayoutN :: HID.Device -> [[(Int, Int)]] -> M.Map Word16 String -> Word8 -> IO (Maybe [[String]])
+yankRawLayoutN keyboard mapping reverseDict la = do
+  let flatMapping = concat mapping
+      numCols = maximum (map snd flatMapping) + 1 
+      maxCols = fromIntegral (numCols - 1) :: Word8
+      maxRows = fromIntegral $ maximum (map fst flatMapping) :: Word8
+
+      coords = [ (Row r, Col c) | r <- [0 .. maxRows]
+                                , c <- [0 .. maxCols]]
+  layerCount <- queryLayerCount keyboard
+
+  if la >= layerCount
+    then return Nothing
+    else do
+      results <- forM coords $ \ (r, c) ->
+        readKeycode keyboard reverseDict (Layer la) r c
+
+      return $ Just (chunksOf numCols results)
+
+
 putLayout :: HID.Device -> [[[String]]] -> M.Map String Word16 -> IO ()
 putLayout keyboard rawLayers forwardDict = do
   forM_ (zip ([0..] :: [Int]) rawLayers) $ \(l, rowList) ->
@@ -66,6 +86,30 @@ putLayout keyboard rawLayers forwardDict = do
                       (Keycode hexVal))
                 _ <- HID.write keyboard cmd
                 threadDelay writeDelayInMs
+
+
+putLayoutN :: HID.Device -> [[String]] -> Word8 -> M.Map String Word16 -> IO ()
+putLayoutN keyboard rawLayer la forwardDict = do
+  forM_ (zip ([0..] :: [Int]) rawLayer) $ \(r, colList) ->
+    forM_ (zip ([0..] :: [Int]) colList) $ \(c, keyStr) ->
+      case keyStr of
+        "none" -> return ()
+        _ -> do
+          let hexResult = case M.lookup keyStr forwardDict of
+                Just val -> Right val
+                Nothing  -> parseHexFallback keyStr
+
+          case hexResult of
+            Left err -> putStrLn $ "Warning: Skipping key at (" ++ show la ++ "," ++ show r ++ "," ++ show c ++ "): " ++ err
+            Right hexVal -> do
+              let cmd = serializeViaCmd (SetKeycode
+                    (Layer la)
+                    (Row $ fromIntegral r)
+                    (Col $ fromIntegral c)
+                    (Keycode hexVal))
+              _ <- HID.write keyboard cmd
+              threadDelay writeDelayInMs 
+
 
 
 -- | Serializes the ViaCommand and its parameters to the corresponding bytes

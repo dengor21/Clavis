@@ -1,6 +1,6 @@
 cabal-version:      3.16
 name:               Clavis
-version:            0.1.1.0
+version:            0.2.0.0
 synopsis: Terminal VIA V3 layout manager for QMK Keyboards
 description:
   This package compiles to an executable that can be used to exctract and flash layouts to VIA compatible keyboards

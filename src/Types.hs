@@ -39,11 +39,19 @@ instance FromJSON ViaConfig
 -- clavis tranposes the raw electrical layout to one resembling the physical layout of your keyboard.
 -- The accuracy of this depends on the quality of the reference JSON your manufacturer provides.
 data UserConfig = UserConfig 
-  { layers :: [[[String]]] -- ^ The layers containing the layout 
+  { layers :: [LayerData] -- ^ The layers containing the layout 
   } deriving (Show, Generic)
 
 instance FromJSON UserConfig
 instance ToJSON UserConfig
+
+data LayerData = LayerData
+  { layer :: Word8
+  , keys :: [[String]]
+  } deriving (Show, Generic)
+
+instance FromJSON LayerData
+instance ToJSON LayerData
 
 -- | Command data structure.
 -- clavis supports the handshake and then only getting and setting keycodes.
@@ -56,8 +64,8 @@ data ViaCommand
 
 -- | Represents the actions Clavis can execute
 data Action 
-  = Yank FilePath FilePath  -- ^ Reads the layout from the keyboard
-  | Put FilePath FilePath   -- ^ Writes the layout to the keyboard
+  = Yank FilePath FilePath (Maybe Word8)  -- ^ Reads the layout from the keyboard
+  | Put FilePath FilePath (Maybe Word8)   -- ^ Writes the layout to the keyboard
   | List
 
 data Options = Options
