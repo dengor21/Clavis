@@ -38,10 +38,8 @@ There is one layer object per layer your keyboard has.
             ["NumLock", "lctl", "LOpt", "LCmd", "fn1", "spc", "spc", "RCmd", "fn1", "rctl", "left", "down", "right"]
           ]
         },
-        [......]
       ]
     }
-  ]
 }
 ```
 
