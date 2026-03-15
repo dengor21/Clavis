@@ -5,12 +5,14 @@ module Main where
 
 import qualified Data.ByteString.Lazy as BSL
 import Data.Aeson (FromJSON, eitherDecode)
+import Json()
 import qualified Data.ByteString.Lazy.Char8 as BSL8
 import qualified System.HIDAPI as HID
 import Data.Version (showVersion)
 import Paths_Clavis (version)
 import qualified Data.Map as M
 import Keycodes (baseAliases)
+import Numeric (showHex)
 import Formatter (formatLayoutMatrix)
 import Data.Word (Word8, Word16)
 import Data.Maybe
@@ -92,6 +94,27 @@ exClav (Put ref input la) = withViaKeyboard ref $ \keyboard config ->
   executePut keyboard config (buildForwardKeycodeDict config) la input
 
 
+
+dumpMacroBuffer :: HID.Device -> IO ()
+dumpMacroBuffer keyboard = do
+  bufSize <- queryMacroBufferSize keyboard 
+  macroCount <- queryMacroCount keyboard 
+  putStrLn $ "Macro slots: " ++ show macroCount 
+  putStrLn $ "Buffer size: " ++ show bufSize
+
+  rawBytes <- readMacroBuffer keyboard bufSize 
+  putStrLn $ show (parseMacroBuffer macroCount rawBytes)
+  putStrLn $ "Raw bytes: " ++ concatMap (\b -> showHex b " ") rawBytes
+
+
+executeDumpMacro :: HID.Device -> IO [Macro]
+executeDumpMacro keyboard = do
+  bufsize <- queryMacroBufferSize keyboard
+  macroCount <- queryMacroCount keyboard 
+  rawBytes <- readMacroBuffer keyboard bufsize 
+  return $ parseMacroBuffer macroCount rawBytes
+
+
 -- | Reads the keyboard layout via hidapi and transforms it into a JSON
 -- The JSON is transposed into layout resembling the physical keyboard
 -- The information for this transformation is read from the VIA reference JSON
@@ -108,8 +131,11 @@ executeYank keyboard config reverseDict maybeLayer layoutPath = do
           let physicalLayers = toPhysicalLayout rawLayers mapping
               layerDataList = zipWith (\n keyData -> LayerData n keyData)
                                 [0..] physicalLayers
-          writeLayoutFile layoutPath (createUserConfig layerDataList config)
+          macrolist <- executeDumpMacro keyboard
+          writeLayoutFile layoutPath (createUserConfig layerDataList config macrolist)
           putStrLn $ "\nSuccess! Layout yanked to '" ++ layoutPath ++ "'"
+
+          putStrLn $ "\nYanking Macros"
 
         Just n -> do
           result <- yankRawLayoutN keyboard mapping reverseDict n
@@ -118,10 +144,11 @@ executeYank keyboard config reverseDict maybeLayer layoutPath = do
             Just rawLayer -> do
               let physicalLayer = toPhysicalLayoutSingle rawLayer mapping
                   layerDataList = [LayerData n physicalLayer]
-              writeLayoutFile  layoutPath  (createUserConfig layerDataList config)
+              macrolist <- executeDumpMacro keyboard
+              writeLayoutFile  layoutPath  (createUserConfig layerDataList config macrolist)
     where
-      createUserConfig layerList (ViaConfig kbName venId prodId _ _) = 
-        UserConfig 1 kbName venId prodId [] layerList 
+      createUserConfig layerList (ViaConfig kbName venId prodId _ _) mac = 
+        UserConfig 1 kbName venId prodId mac layerList 
 
             
   
@@ -142,6 +169,16 @@ executePut keyboard config forwardDict maybeLayer layoutPath = do
         Right () ->
           case maybeLayer of
             Nothing -> do
+              let ms = serializeMacroBuffer $ macros userConfig
+              bufs <- queryMacroBufferSize keyboard
+              if (length ms) <= (fromIntegral bufs)
+                then do
+                  putStrLn "Writing Macros to buffer"
+                  writeMacroBuffer keyboard bufs ms
+                  putStrLn "Macros written successfully"
+                  else putStrLn $ "Defined macros are bigger than the buffer"
+                                ++ "\nNo macros will be written"
+
               case getLayoutMapping config of
                 Left err -> putStrLn $ "Failed to read layout mapping: " ++ err
                 Right mapping -> do
@@ -150,6 +187,7 @@ executePut keyboard config forwardDict maybeLayer layoutPath = do
                     let electrical = toElectricalLayer (keys ld) mapping
                     in putLayoutN keyboard electrical (layer ld) forwardDict
                   putStrLn "\nSuccess! Your layout has been flashed to the keyboard"
+
 
             Just n -> do
               case getLayoutMapping config of
@@ -207,3 +245,4 @@ formatDeviceInfo :: HID.DeviceInfo -> String
 formatDeviceInfo device = 
   (fromMaybe "" (HID.productString device)) ++ "\n" 
     ++ "VendorID: " ++ show (HID.vendorId device) ++ " ProductID: " ++ show (HID.productId device) ++ "\n"
+

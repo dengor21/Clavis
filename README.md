@@ -25,7 +25,6 @@ There is one layer object per layer your keyboard has.
       "keyboardName": "Keychron Q11 ANSI Knob", 
       "vid": "0x3438", 
       "pid": "0x01E0", 
-      "macros": [],
       "layers": [
         {
           "layer": 0,
@@ -39,6 +38,20 @@ There is one layer object per layer your keyboard has.
           ]
         },
       ]
+      "macros": [
+        {
+          "id": 0,
+          "actions": [
+            {"text": "some string"},
+            {"tap": "bspace"},
+            {"press": "lctl"},
+            {"release": "lctl"},
+            {"delay": 29},
+            {"press": "lopt"},
+            {"release": "lopt"}
+          ]
+        },
+      ]
     }
 }
 ```
@@ -46,6 +59,11 @@ There is one layer object per layer your keyboard has.
 You can use short names for the most common keys, if your key is not in the dictionary, you can enter the hex code directly like `"0x53"` or `"53"`.
 
 To generate a file with your current layout use `clavis yank`
+
+**Macros**
+
+Macros are combinations of key presses.
+Clavis visualizes them as a list of actions. Clavis supports the actions `delay`, `text`, `press`, `tap` and `release`
 
 **Yank**
 

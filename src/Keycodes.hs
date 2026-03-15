@@ -1,4 +1,4 @@
-module Keycodes (translateToString, translateToHex, parseHexFallback, baseAliases) where
+module Keycodes (translateToString, translateToHex, parseHexFallback, baseAliases, reverseAliases) where
 
 import Data.Word (Word16)
 import Numeric (readHex, showHex)
@@ -7,7 +7,7 @@ import qualified Data.Map as M
 -- | The master dictionary mapping human-readable strings to 16-bit VIA Keycodes
 baseAliases :: M.Map String Word16
 baseAliases = M.fromList
-    [ -- Basic Letters
+    ( [ -- Basic Letters
       ("a", 0x0004), ("b", 0x0005), ("c", 0x0006), ("d", 0x0007)
     , ("e", 0x0008), ("f", 0x0009), ("g", 0x000A), ("h", 0x000B)
     , ("i", 0x000C), ("j", 0x000D), ("k", 0x000E), ("l", 0x000F)
@@ -41,7 +41,7 @@ baseAliases = M.fromList
     , ("home", 0x004A), ("pgup", 0x004B), ("del", 0x004C), ("end", 0x004D)
     , ("pgdn", 0x004E), ("right", 0x004F), ("left", 0x0050), ("down", 0x0051)
     , ("up", 0x0052)
-    
+
       -- Modifiers (We include Mac and PC aliases, but reverse-mapping will favor the last one)
     , ("lctl", 0x00E0), ("lsft", 0x00E1), ("lalt", 0x00E2), ("lopt", 0x00E2)
     , ("lgui", 0x00E3), ("lcmd", 0x00E3), ("rctl", 0x00E4), ("rsft", 0x00E5)
@@ -53,10 +53,6 @@ baseAliases = M.fromList
       -- VIA/QMK Specifics
     , ("none", 0x0000), ("trans", 0x0001)
     
-      -- Layer Toggles (MO = Momentary Layer, TG = Toggle Layer)
-    , ("mo(0)", 0x5200), ("mo(1)", 0x5201), ("mo(2)", 0x5202), ("mo(3)", 0x5203)
-    , ("tg(0)", 0x5300), ("tg(1)", 0x5301), ("tg(2)", 0x5302), ("tg(3)", 0x5303)
-
     -- Media and Display Brightness
     , ("play", 0x00AE), ("mprv", 0x00AC), ("mnxt", 0x00AB)
     , ("briu", 0x00BE), ("brid", 0x00BD)
@@ -78,7 +74,7 @@ baseAliases = M.fromList
       -- QMK System/Hardware controls 
       -- (0x7013 often acts as a hardware reset/sleep toggle on Keychron splits)
     , ("sys_misc", 0x7013)
-    ]
+    ])
 
 -- | Automatically build the reverse dictionary for the 'yank' command
 reverseAliases :: M.Map Word16 String

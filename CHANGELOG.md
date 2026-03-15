@@ -18,3 +18,7 @@
 * Added formatVersion, vid and pid fields, to check before writing to the keyboard.
 * Added keyboardName for information
 * Added a placeholder macros field.
+ 
+## 0.2.2.0 -- 2026-03-15
+
+* Added Macro functionality

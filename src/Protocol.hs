@@ -3,11 +3,12 @@
 
 module Protocol where
 
-import Types (ViaCommand(..), Keycode(..), Layer(..), Row(..), Col(..), VendorId(..), ProductId(..))
+import Types (Macro(..), MacroAction(..), ViaCommand(..), Keycode(..), Layer(..), Row(..), Col(..), VendorId(..), ProductId(..))
 import qualified Data.ByteString as BS
 import qualified Data.Map as M
+import Data.Char(chr, ord)
 import Data.Word (Word8, Word16)
-import Data.Bits (shiftR, (.&.))
+import Data.Bits (shiftL, shiftR, (.&.), (.|.))
 import qualified System.HIDAPI as HID
 import Data.List (find)
 import Control.Monad (forM, forM_)
@@ -124,6 +125,20 @@ serializeViaCmd cmd = BS.pack $ padTo32 (toBytes cmd)
         , fromIntegral (keycode .&. 0xFF)    -- Low byte
         ]
     toBytes GetLayerCount = [0x11]
+    toBytes GetMacroCount = [0x0C]
+    toBytes GetMacroBufferSize = [0x0D]
+    toBytes (GetMacroBytes offset len) =
+        [ 0x0E
+        , fromIntegral (offset `shiftR` 8)
+        , fromIntegral (offset .&. 0xFF)
+        , fromIntegral len
+        ]
+    toBytes (SetMacroBytes offset len payload) =
+        [ 0x0F
+        , fromIntegral (offset `shiftR` 8)
+        , fromIntegral (offset .&. 0xFF)
+        , fromIntegral len
+        ] ++ payload
     padTo32 bytes = take 32 (bytes ++ repeat 0x00)
 
 
@@ -176,6 +191,19 @@ parseLayerCountResponse :: [Word8] -> Word8
 parseLayerCountResponse (0x11 : n : _) = n
 parseLayerCountResponse _ = 4
 
+parseMacroCountResponse :: [Word8] -> Word8
+parseMacroCountResponse (0x0C : n : _) = n
+parseMacroCountResponse _ = 0
+
+parseMacroBufferSizeResponse :: [Word8] -> Word16
+parseMacroBufferSizeResponse (0x0D : high : low : _) =
+  (fromIntegral high `shiftL` 8) .|. fromIntegral low
+parseMacroBufferSizeResponse _ = 0
+
+parseChunkResponse :: [Word8] -> Word8 -> [Word8]
+parseChunkResponse (0x0E : _ : _ : _ : rest) len = take (fromIntegral len) rest
+parseChunkResponse _ _ = []
+
 isViaDevice :: HID.DeviceInfo -> Bool
 isViaDevice d = HID.usagePage d == viaUsagePage 
 
@@ -184,3 +212,113 @@ enumerateViaDevices = do
   devices <- HID.enumerate Nothing Nothing
   let viaDevices = filter isViaDevice devices
   return viaDevices 
+
+queryMacroCount :: HID.Device -> IO Word8
+queryMacroCount keyboard = do
+  let cmd = serializeViaCmd (GetMacroCount)
+  result <- HID.write keyboard cmd
+
+  case result of
+    -1 -> return 0
+    _ -> do
+      response <- HID.readTimeout keyboard viaMessageLength timeoutInMs
+      return $ parseMacroCountResponse (BS.unpack response)
+
+queryMacroBufferSize :: HID.Device -> IO Word16
+queryMacroBufferSize keyboard = do
+  let cmd = serializeViaCmd GetMacroBufferSize
+  result <- HID.write keyboard cmd
+  
+  case result of
+    -1 -> return 0
+    _ -> do
+      response <- HID.readTimeout keyboard viaMessageLength timeoutInMs 
+      return $ parseMacroBufferSizeResponse (BS.unpack response)
+
+readMacroBuffer :: HID.Device -> Word16 -> IO [Word8]
+readMacroBuffer keyboard bufSize = go 0 []
+  where
+    chunkSize = 28
+
+    go offset acc
+      | offset >= bufSize = return (concat (reverse acc))
+      | otherwise = do
+        let remaining = bufSize - offset
+            len = fromIntegral (min chunkSize remaining) :: Word8
+            cmd = serializeViaCmd (GetMacroBytes offset len)
+        _ <- HID.write keyboard cmd
+        response <- HID.readTimeout keyboard viaMessageLength timeoutInMs 
+        threadDelay writeDelayInMs
+        let bytes = parseChunkResponse (BS.unpack response) len
+
+        if len == 0
+          then go (bufSize+1) (bytes : acc)
+            else go (offset + (fromIntegral len)) (bytes : acc)
+
+parseMacroActions :: [Word8] -> [MacroAction]
+parseMacroActions (0x01 : 0x01 : key : rest)  = MacroTap key : parseMacroActions rest
+parseMacroActions (0x01 : 0x02 : key : rest)  = MacroPress key : parseMacroActions rest
+parseMacroActions (0x01 : 0x03 : key : rest)  = MacroRelease key : parseMacroActions rest
+parseMacroActions (0x01 : 0x04 : digits)      = 
+    let (value, rest) = consumeDelay digits
+    in MacroDelay value : (parseMacroActions rest)
+parseMacroActions (0x01:rest) = parseMacroActions rest
+parseMacroActions bytes@(_:_) = (MacroText value) : parseMacroActions rest
+    where
+    (prefix, rest) = span (\b -> b>=0x02) bytes
+    value = map (chr . fromIntegral) prefix
+parseMacroActions _ = []
+
+
+consumeDelay :: [Word8] -> (Int, [Word8])
+consumeDelay bytes = (value, rest)
+    where
+    (prefix, rest) = span (\b -> b >= 0x30 && b <= 0x39) bytes
+    value = foldl' (\acc b -> acc * 10 + fromIntegral (b - 0x30)) 0 prefix
+
+splitMacros :: [Word8] -> [[Word8]]
+splitMacros [] = []
+splitMacros macros =
+  case break (== 0x00) macros of
+    (macro, 0x00 : rest)  -> macro : splitMacros rest
+    (macro, _ )           -> macro : []
+
+parseMacroBuffer :: Word8 -> [Word8] -> [Macro]
+parseMacroBuffer count buffer =
+  let segments = take (fromIntegral count) (splitMacros buffer)
+  in zipWith (\n s -> Macro n (parseMacroActions s)) [0..] segments
+
+
+serializeMacroAction :: MacroAction -> [Word8]
+serializeMacroAction (MacroTap key)       = [0x01, 0x01, key]
+serializeMacroAction (MacroPress key)     = [0x01, 0x02, key]
+serializeMacroAction (MacroRelease key)   = [0x01, 0x03, key]
+serializeMacroAction (MacroDelay ms)      = [0x01, 0x04] ++ map (fromIntegral . ord) (show ms)
+serializeMacroAction (MacroText text)     = map (fromIntegral . ord) text
+
+serializeMacro :: Macro -> [Word8]
+serializeMacro (Macro _ acts) = concatMap serializeMacroAction acts ++ [0x00]
+
+serializeMacroBuffer :: [Macro] -> [Word8] 
+serializeMacroBuffer = concatMap serializeMacro
+
+writeMacroBuffer :: HID.Device -> Word16 -> [Word8] -> IO ()
+writeMacroBuffer keyboard bufSize buffer = go 0
+  where
+    chunkSize = 28
+    paddedBuf = take (fromIntegral bufSize) (buffer ++ repeat 0x00)
+
+    go offset 
+      | offset >= bufSize = return ()
+      | otherwise = do
+        let remaining = bufSize - offset
+            len = fromIntegral (min chunkSize remaining) :: Word8
+        let chunk = take (fromIntegral len) (drop (fromIntegral offset) paddedBuf)
+            cmd = serializeViaCmd (SetMacroBytes offset len chunk)
+
+        _ <- HID.write keyboard cmd
+        threadDelay writeDelayInMs 
+
+        if len == 0
+          then go (bufSize+1)
+            else go $ offset + (fromIntegral len)

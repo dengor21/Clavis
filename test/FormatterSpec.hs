@@ -3,6 +3,7 @@ module FormatterSpec (spec) where
 import Test.Hspec
 import Formatter
 import Types
+import Json()
 import Data.Aeson (eitherDecode)
 
 spec :: Spec
